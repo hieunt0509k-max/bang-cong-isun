@@ -1,1 +1,355 @@
-placeholder - will fail
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bảng Công ISUN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+body{font-family:'Inter',system-ui,sans-serif}
+.day-cell{min-height:64px}.day-cell.weekend{background:#f8fafc}
+.badge-L{background:#dbeafe;color:#1e40af}.badge-P{background:#dcfce7;color:#166534}
+.badge-O{background:#fee2e2;color:#991b1b}.badge-Ô{background:#fef3c7;color:#92400e}
+.badge-Rh{background:#e0e7ff;color:#3730a3}.badge-B{background:#f3e8ff;color:#6b21a8}
+.badge-A{background:#f1f5f9;color:#475569}.badge-TV{background:#fecaca;color:#7f1d1d}
+.badge-work{background:#ecfdf5;color:#065f46}.badge-empty{background:#f1f5f9;color:#94a3b8}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+<div id="login-screen" class="min-h-screen flex items-center justify-center p-4">
+<div class="w-full max-w-md bg-white rounded-2xl shadow-lg border border-slate-100 p-8">
+<div class="text-center mb-6">
+<div class="w-14 h-14 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl mx-auto mb-3">IS</div>
+<h1 class="text-xl font-bold">Bảng Công ISUN</h1>
+<p class="text-sm text-slate-500 mt-1">Nhập mã số thẻ để xem chấm công</p>
+</div>
+<form id="login-form" class="space-y-4">
+<div>
+<label class="block text-sm font-medium mb-1">Mã số thẻ</label>
+<input type="text" id="login-code" autofocus placeholder="VD: IS000168" class="w-full px-4 py-3 text-sm border rounded-xl focus:ring-2 focus:ring-blue-500 uppercase"/>
+</div>
+<p id="login-error" class="text-sm text-red-600 hidden"></p>
+<button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl">Đăng nhập</button>
+</form>
+<p class="text-xs text-slate-400 text-center mt-6">Chỉ xem bảng công của mình · <button type="button" id="btn-open-admin" class="underline">Admin cập nhật</button></p>
+<p id="login-data-status" class="text-xs text-slate-400 text-center mt-2"></p>
+</div>
+</div>
+
+<div id="app-root" class="hidden">
+<header class="bg-white border-b sticky top-0 z-30 shadow-sm">
+<div class="max-w-3xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">IS</div>
+<div><h1 class="text-lg font-bold">Bảng Công ISUN</h1><p class="text-xs text-slate-500" id="file-info">—</p></div>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<select id="month-select" class="px-3 py-2 text-sm border rounded-lg bg-white"></select>
+<span class="text-sm text-slate-600 hidden sm:inline" id="logged-as"></span>
+<button id="btn-logout" type="button" class="px-3 py-2 text-sm rounded-lg bg-slate-100">Đăng xuất</button>
+</div>
+</div>
+</header>
+<main class="max-w-3xl mx-auto px-4 py-6">
+<div id="no-emp-month" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-sm">Không có dữ liệu của bạn trong tháng này.</div>
+<div id="detail-panel" class="space-y-4">
+<div class="bg-white rounded-xl shadow-sm border p-5">
+<div class="flex flex-wrap justify-between gap-3">
+<div>
+<h2 class="text-xl font-bold" id="detail-name">—</h2>
+<p class="text-sm text-slate-500 mt-0.5"><span id="detail-code" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded">—</span> · <span id="detail-dept">—</span></p>
+</div>
+<div class="text-right text-sm"><p class="text-slate-500">Ngày công tính lương</p><p class="text-2xl font-bold text-blue-600" id="detail-paid-days">—</p></div>
+</div>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="summary-cards"></div>
+<div class="bg-white rounded-xl shadow-sm border p-4">
+<h3 class="font-semibold mb-3">📅 Chi tiết từng ngày</h3>
+<div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-xs"></div>
+<div class="mt-4 flex flex-wrap gap-2 text-xs" id="legend"></div>
+</div>
+<div class="bg-white rounded-xl shadow-sm border p-4 overflow-x-auto">
+<h3 class="font-semibold mb-3">Giờ làm việc & Tăng ca</h3>
+<table class="w-full text-sm" id="hours-table"><thead><tr class="text-left text-slate-500 border-b"><th class="py-2 pr-3">Loại</th><th class="py-2 px-2 text-right">Tổng giờ</th></tr></thead><tbody></tbody></table>
+</div>
+</div>
+</main>
+</div>
+
+<div id="admin-overlay" class="hidden fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+<div class="w-full max-w-lg bg-white rounded-2xl shadow-xl border p-6 my-8 space-y-4">
+<div class="flex justify-between gap-2">
+<div><h2 class="font-semibold">Cập nhật bảng công (Admin)</h2><p class="text-sm text-slate-500">Upload tháng mới — giữ các tháng cũ</p></div>
+<button type="button" id="btn-close-admin" class="text-xl text-slate-400">&times;</button>
+</div>
+<div class="bg-slate-50 rounded-lg border p-4 space-y-2">
+<label class="block text-sm font-medium">GitHub Token</label>
+<div class="flex flex-wrap gap-2">
+<input type="password" id="gh-token" placeholder="ghp_xxxx" class="flex-1 min-w-[160px] px-3 py-2 text-sm border rounded-lg"/>
+<button type="button" id="btn-save-token" class="px-3 py-2 text-sm rounded-lg bg-slate-800 text-white">Lưu</button>
+<button type="button" id="btn-clear-token" class="px-3 py-2 text-sm rounded-lg bg-slate-100">Xóa</button>
+</div>
+<p id="token-status" class="text-xs text-slate-600"></p>
+</div>
+<div class="bg-slate-50 rounded-lg border p-4 space-y-3">
+<label class="block text-sm font-medium">File Excel</label>
+<div class="flex flex-wrap gap-2">
+<label class="cursor-pointer px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg">Chọn Excel<input type="file" id="file-input" accept=".xlsx,.xls" class="hidden"/></label>
+<button id="btn-push-github" type="button" disabled class="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white disabled:opacity-40">Đẩy lên GitHub</button>
+<button id="btn-download-datajs" type="button" disabled class="px-4 py-2 text-sm rounded-lg bg-slate-200 disabled:opacity-40">Tải data.js</button>
+</div>
+<p id="admin-status" class="text-sm text-slate-600"></p>
+<p id="months-list-admin" class="text-xs text-slate-500"></p>
+</div>
+</div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const GH_OWNER='hieunt0509k-max',GH_REPO='bang-cong-isun',GH_PATH='data.js';
+const TOKEN_KEY='bangcong_gh_token',SESSION_KEY='bangcong_logged_code';
+let store={version:2,current:null,months:{}};
+let monthInfo={year:2026,month:9},loggedCode=null,pendingPayload=null;
+
+function normalizeStore(raw){
+  if(!raw)return{version:2,current:null,months:{}};
+  if(raw.months&&typeof raw.months==='object')return{version:2,current:raw.current||Object.keys(raw.months).sort().pop()||null,months:raw.months};
+  if(raw.employees){const key=(raw.year||0)+'-'+String(raw.month||0).padStart(2,'0');return{version:2,current:key,months:{[key]:{title:raw.title,year:raw.year,month:raw.month,updated:raw.updated,source:raw.source,employees:raw.employees}}};}
+  return{version:2,current:null,months:{}};
+}
+function monthKeysSorted(){return Object.keys(store.months||{}).sort().reverse();}
+function updateAdminMonthsList(){const k=monthKeysSorted();document.getElementById('months-list-admin').textContent=k.length?('Đã lưu: '+k.join(', ')):'Chưa có tháng nào';}
+
+async function loadSharedData(){
+  try{
+    if(!window.__SHARED_DATA__){const res=await fetch('data.js?t='+Date.now());if(!res.ok)throw new Error('no');eval(await res.text());}
+    store=normalizeStore(window.__SHARED_DATA__);
+    const keys=monthKeysSorted();
+    document.getElementById('login-data-status').textContent=keys.length?(keys.length+' tháng: '+keys.join(', ')):'Chưa có dữ liệu';
+    updateAdminMonthsList();
+    const saved=sessionStorage.getItem(SESSION_KEY);if(saved)tryLogin(saved,true);
+  }catch(e){console.warn(e);document.getElementById('login-data-status').textContent='Chưa có dữ liệu — Admin cần cập nhật';}
+}
+
+function normalizeEmp(e){
+  const hours=e.hours||{};
+  ['dayAdmin','dayOT','nightAdmin','nightOT','holidayDay','holidayNight','sundayDay','sundayNight'].forEach(k=>{if(!hours[k])hours[k]={};});
+  const leave={};Object.keys(e.leave||{}).forEach(k=>{leave[Number(k)]=e.leave[k];});
+  const h2={};Object.keys(hours).forEach(cat=>{h2[cat]={};Object.keys(hours[cat]||{}).forEach(d=>{h2[cat][Number(d)]=hours[cat][d];});});
+  if(!Object.values(h2).some(o=>Object.keys(o).length)){for(let d=1;d<=31;d++){if(!leave[d])h2.dayAdmin[d]=8;}}
+  return{id:e.id,stt:e.stt,code:String(e.code||'').trim().toUpperCase(),name:e.name,dept:e.dept,sheet:e.sheet,leave,hours:h2,summary:e.summary||{}};
+}
+function formatDate(iso){try{return new Date(iso).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch{return iso;}}
+
+document.getElementById('login-form').addEventListener('submit',e=>{e.preventDefault();tryLogin(document.getElementById('login-code').value,false);});
+
+function tryLogin(codeRaw,silent){
+  const code=String(codeRaw||'').trim().toUpperCase();
+  if(!code){if(!silent)showLoginError('Vui lòng nhập mã số thẻ');return;}
+  const keys=monthKeysSorted();
+  if(!keys.length){if(!silent)showLoginError('Chưa có dữ liệu bảng công');return;}
+  let found=false;
+  for(const k of keys){if((store.months[k].employees||[]).map(normalizeEmp).some(e=>e.code===code)){found=true;break;}}
+  if(!found){if(!silent)showLoginError('Mã số thẻ không đúng hoặc không có trong dữ liệu');sessionStorage.removeItem(SESSION_KEY);return;}
+  document.getElementById('login-error').classList.add('hidden');
+  sessionStorage.setItem(SESSION_KEY,code);loggedCode=code;showApp();
+}
+function showLoginError(msg){const el=document.getElementById('login-error');el.textContent=msg;el.classList.remove('hidden');}
+
+function showApp(){
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-root').classList.remove('hidden');
+  document.getElementById('logged-as').textContent=loggedCode;
+  const keys=monthKeysSorted();
+  const sel=document.getElementById('month-select');
+  sel.innerHTML=keys.map(k=>{const m=store.months[k];return'<option value="'+k+'">Tháng '+m.month+'/'+m.year+'</option>';}).join('');
+  const key=store.current&&store.months[store.current]?store.current:keys[0];
+  sel.value=key;loadMonthView(key);
+}
+document.getElementById('month-select').addEventListener('change',()=>loadMonthView(document.getElementById('month-select').value));
+
+function loadMonthView(key){
+  const block=store.months[key];if(!block)return;
+  monthInfo.year=block.year;monthInfo.month=block.month;store.current=key;
+  document.getElementById('file-info').textContent=(block.title||('Tháng '+block.month+'/'+block.year))+(block.updated?' · '+formatDate(block.updated):'');
+  const emp=(block.employees||[]).map(normalizeEmp).find(e=>e.code===loggedCode);
+  if(!emp){document.getElementById('detail-panel').classList.add('hidden');document.getElementById('no-emp-month').classList.remove('hidden');return;}
+  document.getElementById('no-emp-month').classList.add('hidden');document.getElementById('detail-panel').classList.remove('hidden');
+  renderEmployee(emp);
+}
+
+document.getElementById('btn-logout').addEventListener('click',()=>{
+  sessionStorage.removeItem(SESSION_KEY);loggedCode=null;
+  document.getElementById('app-root').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-code').value='';document.getElementById('login-code').focus();
+});
+
+function renderEmployee(emp){
+  document.getElementById('detail-name').textContent=emp.name;
+  document.getElementById('detail-code').textContent=emp.code;
+  document.getElementById('detail-dept').textContent=emp.dept||'—';
+  document.getElementById('detail-paid-days').textContent=emp.summary.paidWorkDays||0;
+  const cards=[
+    {label:'Ngày đi làm thực tế',value:emp.summary.actualWorkDays,color:'text-slate-800'},
+    {label:'Tổng tăng ca (giờ)',value:emp.summary.totalOT,color:'text-amber-600'},
+    {label:'Hỗ trợ ăn ca (lần)',value:emp.summary.otSubsidyCount,color:'text-cyan-600'},
+    {label:'Nghỉ hưởng lương',value:emp.summary.totalPaidLeave,color:'text-emerald-600'},
+    {label:'Nghỉ không lương',value:emp.summary.totalUnpaidLeave,color:'text-red-600'},
+    {label:'Tăng ca ngày',value:emp.summary.otDay,color:'text-blue-600'},
+    {label:'Tăng ca Chủ nhật',value:emp.summary.sundayDay,color:'text-purple-600'},
+    {label:'Quên chấm công',value:emp.summary.forgotPunch,color:'text-orange-600'},
+    {label:'Đi muộn >10p',value:emp.summary.lateOver10,color:'text-rose-600'}
+  ];
+  document.getElementById('summary-cards').innerHTML=cards.map(c=>'<div class="bg-white rounded-xl p-3 shadow-sm border"><p class="text-xs text-slate-500 mb-1">'+c.label+'</p><p class="text-lg font-bold '+c.color+'">'+(c.value??0)+'</p></div>').join('');
+  renderCalendar(emp);renderHoursTable(emp);
+}
+
+function renderCalendar(emp){
+  const y=monthInfo.year,m=monthInfo.month;
+  const days=new Date(y,m,0).getDate(),first=new Date(y,m-1,1).getDay();
+  let html=['CN','T2','T3','T4','T5','T6','T7'].map(d=>'<div class="font-semibold text-slate-500 py-1">'+d+'</div>').join('');
+  for(let i=0;i<first;i++)html+='<div class="day-cell"></div>';
+  for(let day=1;day<=days;day++){
+    const date=new Date(y,m-1,day),wk=date.getDay()===0||date.getDay()===6;
+    const leave=emp.leave[day],dayH=emp.hours.dayAdmin[day]||0;
+    const ot=(emp.hours.dayOT[day]||0)+(emp.hours.sundayDay[day]||0)+(emp.hours.holidayDay[day]||0)+(emp.hours.nightOT[day]||0)+(emp.hours.sundayNight[day]||0)+(emp.hours.holidayNight[day]||0);
+    let badge='',cls='badge-empty',sub='';
+    if(leave){badge=leave;if(leave==='L')cls='badge-L';else if(leave==='P'||String(leave).indexOf('P')===0)cls='badge-P';else if(leave==='O')cls='badge-O';else if(leave==='Ô')cls='badge-Ô';else if(leave==='Rh')cls='badge-Rh';else if(leave==='B')cls='badge-B';else if(leave==='A')cls='badge-A';else if(leave==='TV')cls='badge-TV';}
+    else if(dayH>0){badge=dayH;cls='badge-work';if(ot>0)sub='+'+ot+'h';}
+    else if(ot>0){badge='+'+ot+'h';cls='badge-work';}else badge='—';
+    html+='<div class="day-cell rounded-lg border p-1'+(wk?' weekend':'')+'"><div class="text-[10px] text-slate-400">'+day+'</div><div class="mt-0.5 inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold '+cls+'">'+badge+'</div>'+(sub?'<div class="text-[10px] text-amber-600">'+sub+'</div>':'')+'</div>';
+  }
+  document.getElementById('calendar-grid').innerHTML=html;
+  document.getElementById('legend').innerHTML=[{c:'badge-work',t:'Đi làm'},{c:'badge-L',t:'L – Nghỉ lễ'},{c:'badge-P',t:'P – Phép năm'},{c:'badge-O',t:'O – Việc riêng'},{c:'badge-Ô',t:'Ô – Ốm'},{c:'badge-Rh',t:'Rh – Chế độ'},{c:'badge-B',t:'B – Luân phiên'},{c:'badge-TV',t:'TV – Thôi việc'}].map(x=>'<span class="inline-flex items-center gap-1"><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold '+x.c+'">'+x.t.split(' – ')[0]+'</span>'+(x.t.indexOf('–')>=0?x.t.split(' – ')[1]:'')+'</span>').join('');
+}
+
+function renderHoursTable(emp){
+  const rows=[{label:'Ca ngày – Tăng ca',key:'otDay'},{label:'Ca đêm – Tăng ca',key:'otNight'},{label:'Chủ nhật – Ngày',key:'sundayDay'},{label:'Chủ nhật – Đêm',key:'sundayNight'},{label:'Ngày lễ – Ngày',key:'holidayDay'},{label:'Ngày lễ – Đêm',key:'holidayNight'},{label:'TỔNG TĂNG CA',key:'totalOT',bold:true}];
+  document.querySelector('#hours-table tbody').innerHTML=rows.map(r=>{const val=emp.summary[r.key]||0;if(!val&&!r.bold)return'';return'<tr class="border-b'+(r.bold?' font-bold bg-slate-50':'')+'"><td class="py-2 pr-3">'+r.label+'</td><td class="py-2 px-2 text-right">'+Number(val).toLocaleString('vi-VN')+'</td></tr>';}).join('');
+}
+
+// Admin
+const adminOverlay=document.getElementById('admin-overlay');
+document.getElementById('btn-open-admin').addEventListener('click',()=>adminOverlay.classList.remove('hidden'));
+document.getElementById('btn-close-admin').addEventListener('click',()=>adminOverlay.classList.add('hidden'));
+const fileInput=document.getElementById('file-input'),btnDownload=document.getElementById('btn-download-datajs'),btnPush=document.getElementById('btn-push-github');
+const adminStatus=document.getElementById('admin-status'),tokenInput=document.getElementById('gh-token'),tokenStatus=document.getElementById('token-status');
+function getToken(){return(localStorage.getItem(TOKEN_KEY)||tokenInput.value||'').trim();}
+function refreshTokenUI(){const t=localStorage.getItem(TOKEN_KEY);if(t){tokenInput.value=t;tokenStatus.innerHTML='<span class="text-emerald-600">✓ Đã lưu token</span>';}else tokenStatus.textContent='Chưa có token';}
+document.getElementById('btn-save-token').addEventListener('click',()=>{const t=tokenInput.value.trim();if(!t){tokenStatus.textContent='Token trống';return;}localStorage.setItem(TOKEN_KEY,t);refreshTokenUI();});
+document.getElementById('btn-clear-token').addEventListener('click',()=>{localStorage.removeItem(TOKEN_KEY);tokenInput.value='';refreshTokenUI();});
+refreshTokenUI();
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+function loadFile(file){
+  adminStatus.textContent='Đang đọc...';btnDownload.disabled=true;btnPush.disabled=true;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+      const block=buildMonthBlock(wb,file.name);
+      const key=block.year+'-'+String(block.month).padStart(2,'0');
+      store.months[key]=block;store.current=key;pendingPayload=store;window.__SHARED_DATA__=store;
+      document.getElementById('login-data-status').textContent=monthKeysSorted().length+' tháng (cập nhật '+key+')';
+      updateAdminMonthsList();btnDownload.disabled=false;btnPush.disabled=false;
+      adminStatus.textContent='Đã đọc tháng '+block.month+'/'+block.year+' ('+block.employees.length+' NV) — giữ tháng cũ khi đẩy';
+    }catch(err){adminStatus.textContent='Lỗi: '+err.message;alert(err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+btnDownload.addEventListener('click',()=>{
+  if(!pendingPayload)pendingPayload=store;
+  const js='window.__SHARED_DATA__='+JSON.stringify(pendingPayload)+';';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([js],{type:'application/javascript'}));a.download='data.js';a.click();
+  adminStatus.textContent='Đã tải data.js';
+});
+
+btnPush.addEventListener('click',async()=>{
+  if(!pendingPayload)pendingPayload=store;
+  const token=getToken();if(!token){adminStatus.textContent='Chưa có token';return;}
+  btnPush.disabled=true;adminStatus.textContent='Đang đẩy...';
+  try{
+    await pushToGH(token,pendingPayload);
+    adminStatus.innerHTML='<span class="text-emerald-700 font-medium">✓ Đã đẩy lên GitHub.</span>';
+    document.getElementById('login-data-status').textContent=monthKeysSorted().length+' tháng: '+monthKeysSorted().join(', ');
+  }catch(err){adminStatus.innerHTML='<span class="text-red-600">Lỗi: '+escapeHtml(err.message)+'</span>';}
+  finally{btnPush.disabled=false;}
+});
+
+function toB64(str){return btoa(unescape(encodeURIComponent(str)));}
+async function pushToGH(token,payload){
+  const content='window.__SHARED_DATA__='+JSON.stringify(payload)+';';
+  const api='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/contents/'+GH_PATH;
+  const headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28'};
+  let sha=null;const g=await fetch(api+'?ref=main',{headers});
+  if(g.ok)sha=(await g.json()).sha;else if(g.status!==404){const e=await g.json().catch(()=>({}));throw new Error(e.message||g.status);}
+  const body={message:'Cập nhật bảng công ('+Object.keys(payload.months||{}).join(', ')+')',content:toB64(content),branch:'main'};
+  if(sha)body.sha=sha;
+  const p=await fetch(api,{method:'PUT',headers:Object.assign({},headers,{'Content-Type':'application/json'}),body:JSON.stringify(body)});
+  if(!p.ok){const e=await p.json().catch(()=>({}));throw new Error(e.message||p.status);}
+}
+
+function num(v){if(v==null||v==='')return 0;const n=Number(v);return isNaN(n)?0:n;}
+function cellVal(ws,r,c){const cell=ws[XLSX.utils.encode_cell({r,c})];return cell?cell.v:null;}
+
+function buildMonthBlock(workbook,fileName){
+  const all=[];let year=monthInfo.year,month=monthInfo.month;
+  for(const sheetName of workbook.SheetNames){
+    const ws=workbook.Sheets[sheetName];if(!ws)continue;
+    const range=XLSX.utils.decode_range(ws['!ref']||'A1');
+    const parsed=parseSheet(ws,range,sheetName);
+    if(parsed.list.length){all.push.apply(all,parsed.list);if(parsed.y)year=parsed.y;if(parsed.m)month=parsed.m;}
+  }
+  if(!all.length)throw new Error('Không tìm thấy nhân viên');
+  const KEEP={actualWorkDays:1,paidWorkDays:1,totalOT:1,otDay:1,otNight:1,sundayDay:1,sundayNight:1,holidayDay:1,holidayNight:1,totalPaidLeave:1,totalUnpaidLeave:1,otSubsidyCount:1,forgotPunch:1,lateOver10:1,lateUnder10:1};
+  const employees=all.map(e=>{
+    const summary={};Object.keys(e.summary||{}).forEach(k=>{if(KEEP[k]&&e.summary[k])summary[k]=e.summary[k];});
+    const hours={};Object.keys(e.hours||{}).forEach(cat=>{const d=e.hours[cat];if(d&&Object.keys(d).length){const o={};Object.keys(d).forEach(day=>{if(d[day])o[day]=d[day];});if(Object.keys(o).length)hours[cat]=o;}});
+    const leave={};Object.keys(e.leave||{}).forEach(d=>{if(e.leave[d])leave[d]=e.leave[d];});
+    return{id:e.id,stt:e.stt,code:e.code,name:e.name,dept:e.dept,sheet:e.sheet,leave,hours,summary};
+  });
+  return{title:'Bảng chấm công tháng '+month+'/'+year,year,month,updated:new Date().toISOString().slice(0,19),source:fileName,employees};
+}
+
+function parseSheet(ws,range,sheetName){
+  const result=[];let headerRow=-1;
+  for(let r=0;r<=Math.min(10,range.e.r);r++){if(String(cellVal(ws,r,0)||'').trim()==='STT'){headerRow=r;break;}}
+  if(headerRow<0)return{list:[],y:null,m:null};
+  const dateCols=[];let y=null,m=null;
+  for(let c=6;c<=range.e.c;c++){
+    const v=cellVal(ws,headerRow,c);
+    if(v instanceof Date){dateCols.push({col:c,day:v.getDate()});if(y==null){y=v.getFullYear();m=v.getMonth()+1;}}
+    else if(typeof v==='number'&&v>40000){const d=XLSX.SSF.parse_date_code(v);if(d){dateCols.push({col:c,day:d.d});if(y==null){y=d.y;m=d.m;}}}
+    else if(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}/.test(v)){const dt=new Date(v);dateCols.push({col:c,day:dt.getDate()});if(y==null){y=dt.getFullYear();m=dt.getMonth()+1;}}
+    else if(dateCols.length>20)break;
+  }
+  for(let r=headerRow+1;r<=range.e.r;r++){
+    const stt=cellVal(ws,r,0);if(stt==null||typeof stt!=='number'||stt<1)continue;
+    const code=String(cellVal(ws,r,1)||'').trim(),name=String(cellVal(ws,r,2)||'').trim(),dept=String(cellVal(ws,r,3)||'').trim();
+    if(!code&&!name)continue;
+    const emp={id:sheetName+'-'+stt+'-'+code,stt,code,name,dept,sheet:sheetName,leave:{},hours:{dayAdmin:{},dayOT:{},nightAdmin:{},nightOT:{},holidayDay:{},holidayNight:{},sundayDay:{},sundayNight:{}},summary:{}};
+    dateCols.forEach(d=>{const v=cellVal(ws,r,d.col);if(v!=null&&v!=='')emp.leave[d.day]=String(v).trim();});
+    emp.summary.forgotPunch=num(cellVal(ws,r,38));emp.summary.lateUnder10=num(cellVal(ws,r,39));emp.summary.lateOver10=num(cellVal(ws,r,40));
+    emp.summary.actualWorkDays=num(cellVal(ws,r,41));emp.summary.paidWorkDays=num(cellVal(ws,r,43));
+    emp.summary.otDay=num(cellVal(ws,r,44));emp.summary.otNight=num(cellVal(ws,r,45));
+    emp.summary.sundayDay=num(cellVal(ws,r,46));emp.summary.sundayNight=num(cellVal(ws,r,47));
+    emp.summary.holidayDay=num(cellVal(ws,r,48));emp.summary.holidayNight=num(cellVal(ws,r,49));
+    emp.summary.totalOT=num(cellVal(ws,r,50));emp.summary.totalPaidLeave=num(cellVal(ws,r,55));
+    emp.summary.totalUnpaidLeave=num(cellVal(ws,r,62));emp.summary.otSubsidyCount=num(cellVal(ws,r,63));
+    [[1,'dayAdmin'],[2,'dayOT'],[3,'nightAdmin'],[4,'nightOT'],[5,'holidayDay'],[6,'holidayNight'],[7,'sundayDay'],[8,'sundayNight']].forEach(([off,key])=>{
+      const rr=r+off;if(rr>range.e.r)return;
+      dateCols.forEach(d=>{const v=num(cellVal(ws,rr,d.col));if(v!==0)emp.hours[key][d.day]=v;});
+    });
+    result.push(emp);
+  }
+  return{list:result,y,m};
+}
+function escapeHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+loadSharedData();
+</script>
+</body>
+</html>
